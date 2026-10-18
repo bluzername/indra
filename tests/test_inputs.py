@@ -152,6 +152,16 @@ def test_model_errors_are_one_clear_message(tmp_path, monkeypatch, capsys):
     )
 
 
+def test_model_dir_checks_for_order_onnx_too(tmp_path):
+    from indra_ocr import ModelError
+    from indra_ocr.models import model_dir
+
+    for name in ("det.onnx", "rec.onnx", "meta.json"):  # order.onnx missing on purpose
+        (tmp_path / name).touch()
+    with pytest.raises(ModelError, match="lacks order.onnx"):
+        model_dir(tmp_path)
+
+
 def test_version_flag(capsys):
     from indra_ocr import __version__
     from indra_ocr.cli import main

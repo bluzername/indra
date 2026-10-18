@@ -40,7 +40,7 @@ def model_dir(
     path = path or os.environ.get("INDRA_OCR_MODEL_DIR")
     if path:
         p = Path(path).expanduser()
-        missing = [f for f in FILES[:2] + FILES[3:] if not (p / f).exists()]
+        missing = [f for f in FILES if not (p / f).exists()]
         if math:
             missing += [f for f in MATH_FILES if not (p / f).exists()]
         if missing:
