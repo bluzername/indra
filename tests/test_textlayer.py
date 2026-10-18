@@ -2,6 +2,7 @@ import numpy as np
 
 from indra_ocr.textlayer import (
     bad_char_count,
+    decode_code_units,
     order_backtracks,
     pdf_order_coherent,
 )
@@ -10,6 +11,21 @@ from indra_ocr.textlayer import (
 def test_bad_chars_count_replacement_and_private_use():
     assert bad_char_count("ok") == 0
     assert bad_char_count("a�") == 2
+
+
+def test_decode_code_units_joins_a_surrogate_pair():
+    # U+1D464 (mathematical italic small x), as pdfium returns it: two UTF-16
+    # code units, one per character index.
+    units = [ord("a"), 0xD835, 0xDC64, ord("b")]
+    assert decode_code_units(units) == [(ord("a"), 0), (0x1D464, 2), (ord("b"), 3)]
+
+
+def test_decode_code_units_replaces_unpaired_surrogates_with_u_fffd():
+    assert decode_code_units([0xDC64]) == [(0xFFFD, 0)]  # lone low surrogate
+    assert decode_code_units([0xD835]) == [(0xFFFD, 0)]  # trailing unpaired high
+    # a high surrogate not followed by its low: the high is dropped as U+FFFD,
+    # the next unit is still read normally
+    assert decode_code_units([0xD835, ord("x")]) == [(0xFFFD, 0), (ord("x"), 1)]
 
 
 def _box(x0, y0, x1, y1):

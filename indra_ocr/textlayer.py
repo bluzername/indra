@@ -37,6 +37,45 @@ def bad_char_count(text: str) -> int:
     return n
 
 
+def decode_code_units(units: list) -> list:
+    """Real Unicode code points from raw UTF-16 code units, one unit per
+    character index, as ``FPDFText_GetUnicode`` returns them.
+
+    Returns a list of ``(code point, index)``: ``index`` is the unit that
+    stands for it for a later ``get_box()``/``get_angle()`` lookup - a
+    surrogate pair's low unit; any other unit, itself.
+
+    ``FPDFText_GetUnicode`` returns one UTF-16 code unit per index, not one
+    code point: a character above U+FFFF (e.g. the mathematical italic
+    letters of STIX-style math fonts) arrives as two consecutive indices,
+    a high surrogate then a low one.  ``chr()`` builds a lone surrogate
+    without complaint, but neither UTF-8 nor JSON can encode it later, so a
+    pair is joined here and an unpaired surrogate becomes U+FFFD instead of
+    reaching the caller as a lone surrogate ``str`` character."""
+    out = []
+    hi = 0
+    for i, u in enumerate(units):
+        if 0xD800 <= u < 0xDC00:  # high surrogate: wait for its low one
+            if hi:
+                out.append((0xFFFD, i - 1))  # the previous high was never completed
+            hi = u
+            continue
+        if 0xDC00 <= u < 0xE000:  # low surrogate
+            if hi:
+                out.append((0x10000 + ((hi - 0xD800) << 10) + (u - 0xDC00), i))
+            else:
+                out.append((0xFFFD, i))  # lone low surrogate
+            hi = 0
+            continue
+        if hi:
+            out.append((0xFFFD, i - 1))
+            hi = 0
+        out.append((u, i))
+    if hi:
+        out.append((0xFFFD, len(units) - 1))
+    return out
+
+
 BROKEN_FONT_MAP = "broken font map"  # TextLayer.reason: the layer's codes are not text
 
 
@@ -102,8 +141,9 @@ def extract_runs(page) -> tuple[list[TextLine], dict]:
         bad: dict = {}
         chars, raw, breaks = [], [], []  # breaks: run ends after these positions
         n_chars = n_rot = n_bad = 0
-        for i in range(n):
-            c = chr(get_unicode(raw_tp, i))
+        units = [get_unicode(raw_tp, j) for j in range(n)]
+        for cp, i in decode_code_units(units):
+            c = chr(cp)
             if c in "\r\n":
                 breaks.append(len(chars))
                 continue
